@@ -4,6 +4,6 @@
 Just kind of hacking it together
 
 Next Steps:
-[ ] Mount Stepper Motor
-[ ] Attach Pulley to chasis
-[ ] Calculate steps per run
+  - [ ] Mount Stepper Motor
+  - [ ] Attach Pulley to chasis
+  - [ ] Calculate steps per run
