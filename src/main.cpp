@@ -3,6 +3,7 @@
 #include "esp32-hal-gpio.h"
 #include "esp32-hal-matrix.h"
 #include "esp32-hal.h"
+#include <cstring>
 
 #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
 #error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
@@ -18,13 +19,22 @@
 
 BluetoothSerial SerialBT;
 
-int noOfSteps = 250;
-int microSecondsDelay = 1000;
+const byte numChars = 32;
+char receivedChars[numChars];
+char tempChars[numChars];        // temporary array for use when parsing
+
+      // variables to hold the parsed data
+#define STEPS 1600
+
+int speed;
+int direction;
+
+boolean newData = false;
 
 void setup()
 {
   Serial.begin(115200);
-  SerialBT.begin("ESP32Test");
+  SerialBT.begin("ESP32BTDev");
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(EN_PIN, OUTPUT);
   pinMode(STEP_PIN, OUTPUT);
@@ -34,34 +44,69 @@ void setup()
   digitalWrite(EN_PIN, LOW);
 }
 
-void rotateMotor(int steps, bool direction, int speed) {
+void rotateMotor(bool direction, int speed) {
   digitalWrite(DIR_PIN, direction);
 
-  for(int i = 0; i < steps; i++){
+  Serial.println("Motor Start");
+  for(int i = 0; i < STEPS * 10.3 ; i++){
     digitalWrite(STEP_PIN, HIGH);
+    digitalWrite(LED_BUILTIN, HIGH);
     delayMicroseconds(speed);
     digitalWrite(STEP_PIN,LOW);
-    delayMicroseconds(speed);
+    digitalWrite(LED_BUILTIN, LOW);
   }
+
+  Serial.println("Motor Stopped");
+}
+
+void readData(){
+  static boolean rxInProgress = false;
+  static byte ndx = 0;
+  char startMarker = '<';
+  char endMarker = '>';
+  char rc;
+
+  while(SerialBT.available() > 0 && newData == false) {
+    rc = SerialBT.read();
+
+    if(rxInProgress == true) {
+      if(rc != endMarker) {
+        receivedChars[ndx] = rc;
+        ndx++;
+        if(ndx >= numChars) {
+          ndx = numChars - 1;
+        }
+      } else {
+        receivedChars[ndx] = '\0';
+        rxInProgress = false;
+        ndx = 0;
+        newData = true;
+      }
+    }
+    else if (rc == startMarker) {
+      rxInProgress = true;
+    }
+  }
+}
+
+void parseData() {
+  char * strtokIndex;
+
+  strtokIndex = strtok(tempChars,",");
+  direction = atoi(strtokIndex);
+  strtokIndex = strtok(NULL, ",");
+  speed = atoi(strtokIndex);
+  Serial.println("Data Parsed");
 }
 
 void loop()
 {
-  char input;
+  readData();
 
-  if(SerialBT.available()){
-    input = SerialBT.read();
-    if(input == '1') {
-      digitalWrite(LED_BUILTIN, HIGH);
-      rotateMotor(1600, 1, 2000);
-      digitalWrite(LED_BUILTIN, LOW);
-    } else if (input == '2') {
-      digitalWrite(LED_BUILTIN, HIGH);
-      rotateMotor(1600, 0, 2000);
-      digitalWrite(LED_BUILTIN, LOW);
-    }
+  if(newData == true) {
+    strcpy(tempChars, receivedChars);
+    parseData();
+    rotateMotor(direction, speed);
+    newData = false;
   }
-
-  delay(100);
-
 }
